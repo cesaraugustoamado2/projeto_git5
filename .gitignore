@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+npm-debug.log
+yarn-error.log
+.pnpm-debug.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Build
+dist/
+build/
+.next/
+out/
+.expo/
+.expo-shared/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# Testing
+coverage/
+.nyc_output/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Mobile
+node_modules/
+.expo/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# Certificates
+*.pem
+*.crt
+*.key

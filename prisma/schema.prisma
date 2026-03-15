@@ -1,0 +1,205 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================================
+// AUTHENTICATION (OAuth)
+// ============================================================================
+
+model User {
+  id                    Int         @id @default(autoincrement())
+  openId                String      @unique @db.VarChar(64)
+  name                  String?     @db.Text
+  email                 String?     @db.VarChar(320)
+  loginMethod           String?     @db.VarChar(64)
+  role                  String      @default("user") // user, admin
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  lastSignedIn          DateTime    @default(now())
+
+  @@index([openId])
+}
+
+// ============================================================================
+// MULTI-TENANT ARCHITECTURE
+// ============================================================================
+// Every table includes autoescolaId to ensure complete data isolation.
+// All queries MUST include WHERE autoescolaId = X filter.
+// ============================================================================
+
+model Autoescola {
+  id                    String      @id @default(cuid())
+  nome                  String      @db.VarChar(255)
+  email                 String      @unique @db.VarChar(255)
+  telefone              String      @db.VarChar(20)
+  whatsappNumber        String      @unique @db.VarChar(20) // Número WhatsApp para receber mensagens
+  whatsappToken         String      @db.Text // Token da WhatsApp Cloud API
+  whatsappBusinessId    String      @db.VarChar(255) // Business Account ID do WhatsApp
+  endereco              String      @db.Text
+  cidade                String      @db.VarChar(100)
+  estado                String      @db.VarChar(2)
+  cep                   String      @db.VarChar(10)
+  cnpj                  String      @unique @db.VarChar(20)
+  
+  // Configurações da IA
+  systemPrompt          String      @db.Text @default("Você é a assistente virtual de uma autoescola. Seu tom é amigável, prestativo e focado em fechar matrículas. Você conhece as leis de trânsito brasileiras (CFC) e o processo de tirar a CNH.")
+  precoAulaTeoria       Float       @default(0)
+  precoAulaManobra      Float       @default(0)
+  precoAulaRua          Float       @default(0)
+  precoMatricula        Float       @default(0)
+  descricaoServicos     String      @db.Text @default("")
+  
+  // Metadata
+  ativo                 Boolean     @default(true)
+  criadoEm              DateTime    @default(now())
+  atualizadoEm          DateTime    @updatedAt
+
+  // Relations
+  clientes              Cliente[]
+  conversas             Conversa[]
+  vendas                Venda[]
+  configuracoes         Configuracao[]
+
+  @@index([email])
+  @@index([cnpj])
+}
+
+model Cliente {
+  id                    String      @id @default(cuid())
+  autoescolaId          String
+  autoescola            Autoescola  @relation(fields: [autoescolaId], references: [id], onDelete: Cascade)
+  
+  nome                  String      @db.VarChar(255)
+  telefone              String      @db.VarChar(20)
+  email                 String?     @db.VarChar(255)
+  whatsappId            String      @unique @db.VarChar(255) // ID do cliente no WhatsApp
+  
+  // Dados de interesse
+  statusInteresse       String      @default("novo") // novo, em_conversa, interessado, convertido, rejeitado
+  tipoAula              String?     @db.VarChar(50) // teoria, manobra, rua, etc
+  dataProximoContato    DateTime?
+  
+  // Metadata
+  criadoEm              DateTime    @default(now())
+  atualizadoEm          DateTime    @updatedAt
+
+  // Relations
+  conversas             Conversa[]
+  vendas                Venda[]
+
+  @@unique([autoescolaId, whatsappId])
+  @@index([autoescolaId])
+  @@index([telefone])
+  @@index([statusInteresse])
+}
+
+model Conversa {
+  id                    String      @id @default(cuid())
+  autoescolaId          String
+  autoescola            Autoescola  @relation(fields: [autoescolaId], references: [id], onDelete: Cascade)
+  
+  clienteId             String
+  cliente               Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  
+  // Histórico de mensagens (armazenado como JSON para flexibilidade)
+  mensagens             Json        @default("[]") // Array de {role, content, timestamp, tipo}
+  
+  // Estado da conversa
+  statusConversa        String      @default("ativa") // ativa, encerrada, aguardando_resposta
+  tentativasVenda       Int         @default(0)
+  ultimaMensagemEm      DateTime    @default(now())
+  
+  // Metadata
+  criadoEm              DateTime    @default(now())
+  atualizadoEm          DateTime    @updatedAt
+
+  // Relations
+  vendas                Venda[]
+
+  @@unique([autoescolaId, clienteId])
+  @@index([autoescolaId])
+  @@index([clienteId])
+  @@index([statusConversa])
+}
+
+model Venda {
+  id                    String      @id @default(cuid())
+  autoescolaId          String
+  autoescola            Autoescola  @relation(fields: [autoescolaId], references: [id], onDelete: Cascade)
+  
+  clienteId             String
+  cliente               Cliente     @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  
+  conversaId            String
+  conversa              Conversa    @relation(fields: [conversaId], references: [id], onDelete: Cascade)
+  
+  // Detalhes da venda
+  tipoServico           String      @db.VarChar(100) // aula_teoria, aula_manobra, aula_rua, matricula, etc
+  valor                 Float
+  statusVenda           String      @default("pendente") // pendente, confirmada, cancelada
+  dataVenda             DateTime    @default(now())
+  
+  // Metadata
+  criadoEm              DateTime    @default(now())
+  atualizadoEm          DateTime    @updatedAt
+
+  @@index([autoescolaId])
+  @@index([clienteId])
+  @@index([statusVenda])
+  @@index([dataVenda])
+}
+
+model Configuracao {
+  id                    String      @id @default(cuid())
+  autoescolaId          String      @unique
+  autoescola            Autoescola  @relation(fields: [autoescolaId], references: [id], onDelete: Cascade)
+  
+  // Configurações gerais
+  chaveOpenAI           String      @db.Text // Chave da OpenAI (criptografada em produção)
+  modeloGPT             String      @default("gpt-4o-mini")
+  temperaturaSistema    Float       @default(0.7)
+  maxTokens             Int         @default(500)
+  
+  // Configurações de WhatsApp
+  webhookToken          String      @db.Text // Token para validar webhook do Facebook
+  whatsappToken         String      @db.Text // Token de acesso da WhatsApp Cloud API
+  
+  // Configurações de Redis
+  redisUrl              String      @default("redis://localhost:6379")
+  ttlConversa           Int         @default(86400) // 24 horas em segundos
+  
+  // Metadata
+  criadoEm              DateTime    @default(now())
+  atualizadoEm          DateTime    @updatedAt
+
+  @@index([autoescolaId])
+}
+
+// ============================================================================
+// AUDIT LOG (Opcional - para rastreabilidade)
+// ============================================================================
+
+model AuditLog {
+  id                    String      @id @default(cuid())
+  autoescolaId          String
+  
+  acao                  String      @db.VarChar(100) // criar, atualizar, deletar, etc
+  entidade              String      @db.VarChar(100) // Cliente, Venda, Conversa, etc
+  entidadeId            String      @db.VarChar(255)
+  dadosAntes            Json?
+  dadosDepois           Json?
+  usuarioId             String?     @db.VarChar(255)
+  
+  criadoEm              DateTime    @default(now())
+
+  @@index([autoescolaId])
+  @@index([entidade])
+  @@index([criadoEm])
+}
